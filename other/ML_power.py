@@ -94,18 +94,22 @@ def classify(voltage_array, V_max, V_min):
     over = voltage_array > V_max
     under = voltage_array < V_min
     voltage_array = np.zeros(np.shape(voltage_array))
+
     voltage_array[over] = 1
     voltage_array[under] = -1
     return voltage_array
 
 
 if __name__ == '__main__':
+    '''
     # tan of arccos of 0.85 is 0.6197
     p_to_q_factor = 0.6197
     V_max = 1.01
     V_min = 0.95
-
-    old_ppc = case4gs()
+    
+    network_data = np.load('/Users/waelabid/Desktop/Research/DERcontrol/other/network_data.npz')
+    old_ppc = network_data['ppc'][()]
+    print(old_ppc['bus'])
     old_data = np.genfromtxt('res_avg_load_data_5min_2days_no_headers.csv', delimiter=',')
 
     new_data_real = aggregate(old_data, old_ppc['bus'][:, 2])
@@ -115,11 +119,18 @@ if __name__ == '__main__':
     voltage_array = runpf_ex(new_data_real, old_ppc)
     voltage_classified = classify(voltage_array, V_max, V_min)
 
+    np.savez('ML_power', new_data_stacked=new_data_stacked, voltage_classified=voltage_classified)
+    '''
+
+    training_data = np.load('ML_power.npz')
+    new_data_stacked = training_data['new_data_stacked']
+    voltage_classified = training_data['voltage_classified']
+
     print(np.shape(new_data_stacked))
     print(np.shape(voltage_classified))
 
-    svm_train(new_data_stacked.T, voltage_classified[0].T)
-    svm_train(new_data_stacked.T, voltage_classified[1].T)
-    svm_train(new_data_stacked.T, voltage_classified[2].T)
-
-    print(voltage_classified)
+    svm_train(new_data_stacked.T, voltage_classified[30].T)
+    svm_train(new_data_stacked.T, voltage_classified[50].T)
+    svm_train(new_data_stacked.T, voltage_classified[80].T)
+    svm_train(new_data_stacked.T, voltage_classified[100].T)
+    svm_train(new_data_stacked.T, voltage_classified[120].T)
