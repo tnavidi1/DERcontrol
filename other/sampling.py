@@ -22,16 +22,25 @@ class Resampling:
         return downsampled
 
 
-    def upsampling(self, data, t, tnew):
-        std_dv = np.std(data)
-        print(std_dv)
+    def upsampling(self, data, t, tnew, new_num_col):
+        steps_per_day = int(1440 / t)
+        #num_days = int((np.size(data) * t) / 1440)
+        one_day = np.zeros((np.size(data, 0), steps_per_day))
+        one_day_std = np.zeros((np.size(data, 0), steps_per_day))
+
+        for a in range(np.size(one_day, 0)):
+            for b in range(np.size(one_day, 1)):
+                sub_array = data[a,b::steps_per_day]
+                one_day[a, b] = np.mean(sub_array)
+                one_day_std[a, b] = np.std(sub_array)
+
         t_ratio = t // tnew
-        upsampled = np.zeros((np.size(data, 0), np.size(data, 1) * t_ratio))
+        upsampled = np.zeros((np.size(data, 0), new_num_col))
         for i in range(np.size(upsampled, 0)):
             for j in range(np.size(upsampled, 1)):
-                upsampled[i][j] = np.random.normal(data[i][j/t_ratio], std_dv)
+                #upsampled[i][j] = np.random.normal(one_day[i,(j/t_ratio)%24], one_day_std[i,(j/t_ratio)%24])
+                upsampled[i][j] = np.random.normal(data[i,(j/t_ratio)], one_day_std[i,(j/t_ratio)%24])
         return upsampled
-
 
 
 if __name__ == '__main__':
