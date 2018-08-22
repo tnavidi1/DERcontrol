@@ -1,9 +1,15 @@
 import pypower
+import sklearn
+from sklearn import preprocessing
 from pypower.api import runpf, ppoption, makeYbus
 from aggregate import aggregate
 import numpy as np
 from numpy import array
 from first_svm import svm_train
+from keras_first_network import nn_train
+from sampling import Resampling
+from forecaster_primitive import predict
+import matplotlib.pyplot as plt
 
 
 
@@ -50,18 +56,6 @@ def case4gs():
 
     return ppc
 
-"""
-Processes data and returns new_ppc for each time_step
-"""
-def prep_data(new_data, old_ppc, time_step):
-    #tan of arccos of 0.85 is 0.6197
-    p_to_q_factor = 0.6197
-
-    column = new_data[:, time_step]
-    old_ppc['bus'][:, 2] = column
-    old_ppc['bus'][:, 3] = p_to_q_factor * column
-
-    return old_ppc
 
 """
 Runs runpf on the ppc and returns the voltage ppc
@@ -77,38 +71,59 @@ def pre_runpf(ppc, pLoad, rLoad):
 
     return runVoltage
 
-def runpf_ex(new_data, old_ppc):
-    voltage_array = np.zeros((np.size(new_data, 0), np.size(new_data, 1)))
 
-    for i in range(np.size(new_data, 1)):
-        new_ppc = prep_data(new_data, old_ppc, i)
+def runpf_ex(real_power, reactive_power, ppc):
+    voltage_array = np.zeros((np.size(real_power, 0), np.size(real_power, 1)))
 
-        pLoad = new_ppc['bus'][:, 2]
-        rLoad = new_ppc['bus'][:, 3]
+    for i in range(np.size(real_power, 1)):
+        pLoad = real_power[:,i]
+        rLoad = reactive_power[:,i]
 
-        voltage = pre_runpf(new_ppc, pLoad, rLoad)
+        voltage = pre_runpf(ppc, pLoad, rLoad)
         voltage_array[:, i] = voltage
     return voltage_array
 
 def classify(voltage_array, V_max, V_min):
+    #for i in range(np.size(voltage_array, 0)):
+        #print(i, np.mean(voltage_array[i]))
     over = voltage_array > V_max
     under = voltage_array < V_min
     voltage_array = np.zeros(np.shape(voltage_array))
 
     voltage_array[over] = 1
     voltage_array[under] = -1
+
+    #print(voltage_array)
     return voltage_array
+
+def svm_ML(new_data_stacked, voltage_classified):
+    svm_train(new_data_stacked.T, voltage_classified[30].T)
+    #svm_train(new_data_stacked.T, voltage_classified[50].T)
+    #svm_train(new_data_stacked.T, voltage_classified[80].T)
+    #svm_train(new_data_stacked.T, voltage_classified[100].T)
+    #svm_train(new_data_stacked.T, voltage_classified[120].T)
+
+def nn_ML(new_data_stacked, voltage_classified, loss, activation_1, activation_2, activation_3, epochs, batch_size):
+    nn_train(new_data_stacked.T, voltage_classified.T, loss, activation_1, activation_2, activation_3, epochs, batch_size)
 
 
 if __name__ == '__main__':
+    print('program beginning')
+
+    #NON-SOLAR
+
     '''
     # tan of arccos of 0.85 is 0.6197
     p_to_q_factor = 0.6197
-    V_max = 1.01
+    V_max = 1.0
     V_min = 0.95
     
     network_data = np.load('/Users/waelabid/Desktop/Research/DERcontrol/other/network_data.npz')
     old_ppc = network_data['ppc'][()]
+    old_ppc['gen'][:,5] = 1.022
+    '''
+
+    '''
     print(old_ppc['bus'])
     old_data = np.genfromtxt('res_avg_load_data_5min_2days_no_headers.csv', delimiter=',')
 
@@ -122,15 +137,59 @@ if __name__ == '__main__':
     np.savez('ML_power', new_data_stacked=new_data_stacked, voltage_classified=voltage_classified)
     '''
 
+    #SOLAR
+
+
+    '''
     training_data = np.load('ML_power.npz')
     new_data_stacked = training_data['new_data_stacked']
     voltage_classified = training_data['voltage_classified']
 
-    print(np.shape(new_data_stacked))
-    print(np.shape(voltage_classified))
+    #new_data_stacked_normalized = sklearn.preprocessing.normalize(new_data_stacked)
+    #nn_ML(new_data_stacked_normalized, voltage_classified, 'binary_crossentropy', 'linear', 'linear', 'tanh', 300, 25)
+    #svm_ML(new_data_stacked_normalized, voltage_classified)
 
-    svm_train(new_data_stacked.T, voltage_classified[30].T)
-    svm_train(new_data_stacked.T, voltage_classified[50].T)
-    svm_train(new_data_stacked.T, voltage_classified[80].T)
-    svm_train(new_data_stacked.T, voltage_classified[100].T)
-    svm_train(new_data_stacked.T, voltage_classified[120].T)
+    node_idx = [1, 7, 15, 22, 30, 37, 45, 52, 60] #do not modify reactive power, only real power (first half of the array)
+    solar_penetration = 0.15
+
+    DataDict = np.load('/Users/waelabid/Desktop/Research/DERcontrol/other/solar_data.npz')
+    sNormFull = np.matrix(DataDict['sNormFull'])
+
+    res = Resampling(sNormFull, 60, 5)
+    sNormFull_upsampled = res.upsampling(sNormFull, 60, 5, np.size(new_data_stacked, 1))
+
+    for i in node_idx:
+        solar = predict(np.array(solar_penetration), 0.03) * np.mean(new_data_stacked[i]) * predict(sNormFull_upsampled, 0.05)
+        new_data_stacked[i] -= solar.flatten()
+
+
+    #re-classifying after adding solar
+    voltage_array = runpf_ex(new_data_stacked[:np.size(new_data_stacked, 0)/2], new_data_stacked[np.size(new_data_stacked, 0)/2:], old_ppc)
+    voltage_classified = classify(voltage_array, V_max, V_min)
+
+    over = 0
+    under = 0
+    within = 0
+    for i in range(np.size(voltage_classified, 0)):
+        for j in range(np.size(voltage_classified, 1)):
+            if voltage_classified[i,j] > 0:
+                over += 1
+            elif voltage_classified[i,j] < 0:
+                under += 1
+            else:
+                within += 1
+    print('over, under, within')
+    print(over, under, within)
+
+    np.savez('ML_power_solar', new_data_stacked=new_data_stacked, voltage_classified=voltage_classified, voltage_array=voltage_array)
+    '''
+
+
+    training_data = np.load('ML_power_solar.npz')
+    new_data_stacked = training_data['new_data_stacked']
+    voltage_classified = training_data['voltage_classified']
+
+    new_data_stacked_normalized = sklearn.preprocessing.normalize(new_data_stacked)
+
+    #nn_ML(new_data_stacked_normalized, voltage_classified, 'binary_crossentropy', 'linear', 'linear', 'tanh', 100, 10)
+    svm_ML(new_data_stacked_normalized, voltage_classified)
