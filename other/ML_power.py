@@ -98,7 +98,7 @@ def classify(voltage_array, V_max, V_min):
 
 def svm_ML(new_data_stacked, voltage_classified):
     svm_train(new_data_stacked.T, voltage_classified[30].T)
-    #svm_train(new_data_stacked.T, voltage_classified[50].T)
+    #svm_train(new_data_stacked.T, voltage_classified[60].T)
     #svm_train(new_data_stacked.T, voltage_classified[80].T)
     #svm_train(new_data_stacked.T, voltage_classified[100].T)
     #svm_train(new_data_stacked.T, voltage_classified[120].T)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     # tan of arccos of 0.85 is 0.6197
     p_to_q_factor = 0.6197
     V_max = 1.0
-    V_min = 0.95
+    V_min = 0.97
     
     network_data = np.load('/Users/waelabid/Desktop/Research/DERcontrol/other/network_data.npz')
     old_ppc = network_data['ppc'][()]
@@ -138,6 +138,7 @@ if __name__ == '__main__':
     '''
 
     #SOLAR
+
 
 
     '''
@@ -166,6 +167,13 @@ if __name__ == '__main__':
     #re-classifying after adding solar
     voltage_array = runpf_ex(new_data_stacked[:np.size(new_data_stacked, 0)/2], new_data_stacked[np.size(new_data_stacked, 0)/2:], old_ppc)
     voltage_classified = classify(voltage_array, V_max, V_min)
+    print(voltage_classified[30])
+
+    plt.figure(0)
+    plt.plot(voltage_array[30])
+    plt.plot(0.97)
+    plt.plot(1)
+    plt.show()
 
     over = 0
     under = 0
@@ -185,11 +193,44 @@ if __name__ == '__main__':
     '''
 
 
+
+
     training_data = np.load('ML_power_solar.npz')
     new_data_stacked = training_data['new_data_stacked']
     voltage_classified = training_data['voltage_classified']
+    voltage_array = training_data['voltage_array']
 
+    #print(voltage_classified[30])
+
+
+    #print(np.shape(voltage_classified))
+    #print(voltage_classified)
+    #print(np.shape(voltage_array))
+    #print(voltage_array)
     new_data_stacked_normalized = sklearn.preprocessing.normalize(new_data_stacked)
+    #print(np.shape(new_data_stacked_normalized))
 
-    #nn_ML(new_data_stacked_normalized, voltage_classified, 'binary_crossentropy', 'linear', 'linear', 'tanh', 100, 10)
-    svm_ML(new_data_stacked_normalized, voltage_classified)
+
+    '''
+    over = 0
+    under = 0
+    within = 0
+    for i in range(np.size(voltage_classified, 0)):
+        print(i, voltage_classified[i])
+        for j in range(np.size(voltage_classified, 1)):
+            if voltage_classified[i, j] > 0:
+                over += 1
+            elif voltage_classified[i, j] < 0:
+                under += 1
+            else:
+                within += 1
+    print('over, under, within')
+    print(over, under, within)
+    '''
+
+    #nodes over chosen: 1, 6, 12, 35, 55
+    #nodes within chosen: 57, 63
+    #nodes under chosen: 64, 65, 78, 120
+
+    #nn_ML(new_data_stacked, voltage_classified, 'binary_crossentropy', 'linear', 'linear', 'tanh', 100, 10)
+    svm_ML(new_data_stacked, voltage_classified)

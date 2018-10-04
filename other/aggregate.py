@@ -24,8 +24,10 @@ def aggregate(data, max_loads, daily_max = False, time_resolution = np.nan):
             while np.max(new_data[i]) < max_loads[i]:
                 num_row = np.random.randint(0, len(data) - 1)
                 new_data[i] += data[num_row]
-            adjustment_rate = np.max(new_data[i]) / max_loads[i]
-            new_data[i] /= adjustment_rate
+            if max_loads[i] != 0:
+                adjustment_rate = np.max(new_data[i]) / max_loads[i]
+                new_data[i] /= adjustment_rate
+
         return new_data
 
     else:
